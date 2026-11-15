@@ -7,21 +7,31 @@
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
         body { margin: 0; background: #090d16; color: #fff; font-family: -apple-system, sans-serif; display: flex; flex-direction: column; height: 100vh; }
-        header { padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; background: #0f172a; border-bottom: 1px solid #1e293b; gap: 8px; }
-        select { background: #1e293b; color: #fff; border: 1px solid #334155; padding: 6px 10px; border-radius: 6px; font-size: 13px; max-width: 200px; }
-        button { background: #ef4444; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; font-size: 13px; cursor: pointer; }
+        header { padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; background: #0f172a; border-bottom: 1px solid #1e293b; gap: 8px; flex-wrap: wrap; }
+        select { background: #1e293b; color: #fff; border: 1px solid #334155; padding: 6px 8px; border-radius: 6px; font-size: 13px; max-width: 170px; }
+        .mode-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; background: #1e293b; padding: 6px 10px; border-radius: 6px; border: 1px solid #334155; cursor: pointer; user-select: none; }
+        .mode-toggle input { accent-color: #3b82f6; width: 15px; height: 15px; margin: 0; }
+        button { background: #ef4444; color: #fff; border: none; padding: 7px 12px; border-radius: 6px; font-weight: bold; font-size: 13px; cursor: pointer; }
         #reader { width: 100%; flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-        p { text-align: center; font-size: 13px; color: #94a3b8; padding: 12px; margin: 0; }
+        .footer-bar { background: #0f172a; border-top: 1px solid #1e293b; padding: 12px 16px; text-align: center; }
+        #status-text { font-size: 13px; color: #94a3b8; margin: 0; }
+        #last-scanned { font-size: 14px; font-weight: bold; color: #4ade80; margin: 4px 0 0 0; min-height: 20px; }
     </style>
 </head>
 <body>
     <header>
-        <strong>VertiRENT Scanner</strong>
         <select id="camera-select" onchange="switchCamera()"></select>
-        <button onclick="window.close()">Sluiten</button>
+        <label class="mode-toggle" title="Laat venster open voor meerdere scans">
+            <input type="checkbox" id="continuous-mode">
+            <span>Doorlopend</span>
+        </label>
+        <button onclick="closeScanner()">Klaar / Sluiten</button>
     </header>
     <div id="reader"></div>
-    <p id="status-text">Camera wordt gestart...</p>
+    <div class="footer-bar">
+        <p id="status-text">Camera wordt gestart...</p>
+        <p id="last-scanned"></p>
+    </div>
 
     <script>
         const html5QrCode = new Html5Qrcode("reader", {
@@ -37,8 +47,19 @@
 
         const cameraSelect = document.getElementById("camera-select");
         const statusText = document.getElementById("status-text");
+        const lastScannedText = document.getElementById("last-scanned");
+        const continuousCheckbox = document.getElementById("continuous-mode");
 
-        function onScanSuccess(decodedText) {
+        // Zet 'Doorlopend' automatisch aan als de URL ?mode=continuous bevat
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('mode') === 'continuous') {
+            continuousCheckbox.checked = true;
+        }
+
+        let isPaused = false;
+        let scanCount = 0;
+
+        function playBeep() {
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
                 const osc = ctx.createOscillator();
@@ -47,11 +68,38 @@
                 osc.start();
                 setTimeout(() => osc.stop(), 100);
             } catch (e) {}
+        }
+
+        function closeScanner() {
+            html5QrCode.stop().then(() => window.close()).catch(() => window.close());
+        }
+
+        function onScanSuccess(decodedText) {
+            if (isPaused) return;
+
+            playBeep();
+            if (navigator.vibrate) navigator.vibrate(100);
 
             if (window.opener) {
                 window.opener.postMessage({ type: 'VERTIRENT_BARCODE', code: decodedText }, '*');
             }
-            html5QrCode.stop().then(() => window.close());
+
+            // Als 'Doorlopend' UIT staat: sluit direct na 1 scan
+            if (!continuousCheckbox.checked) {
+                closeScanner();
+                return;
+            }
+
+            // Als 'Doorlopend' AAN staat: pauzeer 2 seconden tegen dubbel scannen en ga door
+            isPaused = true;
+            scanCount++;
+            lastScannedText.textContent = `✓ (${scanCount}x) Gescand: ${decodedText}`;
+            statusText.textContent = "Even wachten voor volgende item...";
+
+            setTimeout(() => {
+                isPaused = false;
+                statusText.textContent = "Klaar voor het volgende product...";
+            }, 2000);
         }
 
         function startWithCamera(cameraIdOrConfig) {
