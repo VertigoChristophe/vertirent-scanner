@@ -8,8 +8,10 @@
     <style>
         body { margin: 0; background: #090d16; color: #fff; font-family: -apple-system, sans-serif; display: flex; flex-direction: column; height: 100vh; }
         header { padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; background: #0f172a; border-bottom: 1px solid #1e293b; gap: 8px; }
-        select { background: #1e293b; color: #fff; border: 1px solid #334155; padding: 6px 10px; border-radius: 6px; font-size: 13px; max-width: 200px; }
-        button { background: #ef4444; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; font-size: 13px; cursor: pointer; }
+        .btn-group { display: flex; gap: 8px; }
+        button { border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; font-size: 13px; cursor: pointer; }
+        .btn-switch { background: #1e293b; color: #fff; border: 1px solid #334155; }
+        .btn-close { background: #ef4444; color: #fff; }
         #reader { width: 100%; flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; }
         p { text-align: center; font-size: 13px; color: #94a3b8; padding: 12px; margin: 0; }
     </style>
@@ -17,28 +19,27 @@
 <body>
     <header>
         <strong>VertiRENT Scanner</strong>
-        <select id="camera-select" onchange="switchCamera()"></select>
-        <button onclick="window.close()">Sluiten</button>
+        <div class="btn-group">
+            <button class="btn-switch" onclick="toggleCamera()">Wissel camera</button>
+            <button class="btn-close" onclick="window.close()">Sluiten</button>
+        </div>
     </header>
     <div id="reader"></div>
     <p id="status-text">Camera wordt gestart...</p>
 
     <script>
-        const formatsToSupport = [
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.CODE_39,
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.EAN_8,
-            Html5QrcodeSupportedFormats.QR_CODE
-        ];
-
         const html5QrCode = new Html5Qrcode("reader", {
-            formatsToSupport: formatsToSupport,
-            experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+            formatsToSupport: [
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.CODE_39,
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.QR_CODE
+            ]
         });
 
-        const cameraSelect = document.getElementById("camera-select");
         const statusText = document.getElementById("status-text");
+        let currentFacingMode = "environment"; // Start altijd met de achtercamera
 
         function onScanSuccess(decodedText) {
             try {
@@ -56,63 +57,40 @@
             html5QrCode.stop().then(() => window.close());
         }
 
-        function startWithCamera(cameraIdOrConfig) {
+        function startScanner(facingMode) {
             const config = {
-                fps: 20,
+                fps: 15,
                 qrbox: function(viewfinderWidth, viewfinderHeight) {
                     return {
                         width: Math.floor(viewfinderWidth * 0.85),
-                        height: Math.floor(viewfinderHeight * 0.45)
+                        height: Math.floor(viewfinderHeight * 0.40)
                     };
-                },
-                videoConstraints: {
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 },
-                    focusMode: "continuous"
                 }
             };
 
             html5QrCode.start(
-                cameraIdOrConfig,
+                { facingMode: facingMode },
                 config,
                 onScanSuccess,
                 () => {}
             ).then(() => {
-                statusText.textContent = "Houd de streepjescode horizontaal in het kader (15-25 cm afstand)...";
+                statusText.textContent = "Richt de camera op een barcode of QR-code...";
             }).catch(err => {
                 statusText.textContent = "Camera fout: " + err;
             });
         }
 
-        function switchCamera() {
-            const selectedId = cameraSelect.value;
+        function toggleCamera() {
+            currentFacingMode = (currentFacingMode === "environment") ? "user" : "environment";
             html5QrCode.stop().then(() => {
-                startWithCamera(selectedId);
+                startScanner(currentFacingMode);
+            }).catch(() => {
+                startScanner(currentFacingMode);
             });
         }
 
-        Html5Qrcode.getCameras().then(devices => {
-            if (devices && devices.length) {
-                let preferredCamera = devices[0].id;
-                devices.forEach(device => {
-                    const option = document.createElement("option");
-                    option.value = device.id;
-                    option.text = device.label || `Camera ${cameraSelect.length + 1}`;
-                    cameraSelect.appendChild(option);
-
-                    const label = (device.label || "").toLowerCase();
-                    if (label.includes("iphone") || label.includes("back") || label.includes("environment")) {
-                        preferredCamera = device.id;
-                        cameraSelect.value = device.id;
-                    }
-                });
-                startWithCamera(preferredCamera);
-            } else {
-                startWithCamera({ facingMode: "environment" });
-            }
-        }).catch(() => {
-            startWithCamera({ facingMode: "environment" });
-        });
+        // Start direct zonder eerst getCameras() op te vragen (voorkomt iOS front-camera bug)
+        startScanner(currentFacingMode);
     </script>
 </body>
 </html>
