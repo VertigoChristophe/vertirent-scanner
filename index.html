@@ -39,7 +39,11 @@
         });
 
         const statusText = document.getElementById("status-text");
-        let currentFacingMode = "environment"; // Start altijd met de achtercamera
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        
+        let currentFacingMode = "environment";
+        let desktopCameras = [];
+        let desktopCamIndex = 0;
 
         function onScanSuccess(decodedText) {
             try {
@@ -57,8 +61,8 @@
             html5QrCode.stop().then(() => window.close());
         }
 
-        function startScanner(facingMode) {
-            const config = {
+        function getScannerConfig() {
+            return {
                 fps: 15,
                 qrbox: function(viewfinderWidth, viewfinderHeight) {
                     return {
@@ -67,30 +71,55 @@
                     };
                 }
             };
+        }
 
+        function startScanner(cameraParam, labelName) {
             html5QrCode.start(
-                { facingMode: facingMode },
-                config,
+                cameraParam,
+                getScannerConfig(),
                 onScanSuccess,
                 () => {}
             ).then(() => {
-                statusText.textContent = "Richt de camera op een barcode of QR-code...";
+                statusText.textContent = labelName 
+                    ? `Actief: ${labelName}` 
+                    : "Richt de camera op een barcode of QR-code...";
             }).catch(err => {
                 statusText.textContent = "Camera fout: " + err;
             });
         }
 
         function toggleCamera() {
-            currentFacingMode = (currentFacingMode === "environment") ? "user" : "environment";
             html5QrCode.stop().then(() => {
-                startScanner(currentFacingMode);
-            }).catch(() => {
-                startScanner(currentFacingMode);
-            });
+                if (isMobile) {
+                    currentFacingMode = (currentFacingMode === "environment") ? "user" : "environment";
+                    startScanner({ facingMode: currentFacingMode });
+                } else if (desktopCameras.length > 1) {
+                    desktopCamIndex = (desktopCamIndex + 1) % desktopCameras.length;
+                    const nextCam = desktopCameras[desktopCamIndex];
+                    startScanner(nextCam.id, nextCam.label);
+                }
+            }).catch(() => {});
         }
 
-        // Start direct zonder eerst getCameras() op te vragen (voorkomt iOS front-camera bug)
-        startScanner(currentFacingMode);
+        // Op iPhone: gebruik facingMode (voorkomt front-camera bug)
+        // Op Mac: zoek automatisch naar de iPhone Continuïteitscamera
+        if (isMobile) {
+            startScanner({ facingMode: currentFacingMode });
+        } else {
+            Html5Qrcode.getCameras().then(devices => {
+                desktopCameras = devices || [];
+                if (desktopCameras.length > 0) {
+                    const iphoneIdx = desktopCameras.findIndex(d => (d.label || "").toLowerCase().includes("iphone"));
+                    desktopCamIndex = iphoneIdx !== -1 ? iphoneIdx : 0;
+                    const chosen = desktopCameras[desktopCamIndex];
+                    startScanner(chosen.id, chosen.label);
+                } else {
+                    startScanner({ facingMode: "environment" });
+                }
+            }).catch(() => {
+                startScanner({ facingMode: "environment" });
+            });
+        }
     </script>
 </body>
 </html>
