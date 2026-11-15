@@ -90,10 +90,9 @@
                 startWithCamera(selectedId);
             });
         }
-
         Html5Qrcode.getCameras().then(devices => {
             if (devices && devices.length) {
-                let preferredCamera = devices[0].id;
+                let preferredCamera = null;
                 devices.forEach(device => {
                     const option = document.createElement("option");
                     option.value = device.id;
@@ -101,18 +100,33 @@
                     cameraSelect.appendChild(option);
 
                     const label = (device.label || "").toLowerCase();
-                    if (label.includes("iphone") || label.includes("back") || label.includes("environment")) {
+                    if (
+                        label.includes("iphone") ||
+                        label.includes("achter") ||
+                        label.includes("back") ||
+                        label.includes("rear") ||
+                        label.includes("environment")
+                    ) {
                         preferredCamera = device.id;
                         cameraSelect.value = device.id;
                     }
                 });
-                startWithCamera(preferredCamera);
+
+                if (preferredCamera) {
+                    startWithCamera(preferredCamera);
+                } else {
+                    // Fallback naar de laatste camera in de lijst (op mobiel altijd de achtercamera)
+                    const lastCam = devices[devices.length - 1].id;
+                    cameraSelect.value = lastCam;
+                    startWithCamera(lastCam);
+                }
             } else {
-                startWithCamera({ facingMode: "environment" });
+                startWithCamera({ facingMode: { exact: "environment" } });
             }
         }).catch(() => {
             startWithCamera({ facingMode: "environment" });
         });
     </script>
+
 </body>
 </html>
