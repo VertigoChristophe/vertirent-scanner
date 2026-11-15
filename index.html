@@ -24,12 +24,23 @@
     <p id="status-text">Camera wordt gestart...</p>
 
     <script>
-        const html5QrCode = new Html5Qrcode("reader");
+        const formatsToSupport = [
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.QR_CODE
+        ];
+
+        const html5QrCode = new Html5Qrcode("reader", {
+            formatsToSupport: formatsToSupport,
+            experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+        });
+
         const cameraSelect = document.getElementById("camera-select");
         const statusText = document.getElementById("status-text");
 
         function onScanSuccess(decodedText) {
-            // Speel bevestigingspiep af
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
                 const osc = ctx.createOscillator();
@@ -39,7 +50,6 @@
                 setTimeout(() => osc.stop(), 100);
             } catch (e) {}
 
-            // Stuur de code terug naar VertiRENT (alleen naar Google Apps Script)
             if (window.opener) {
                 window.opener.postMessage({ type: 'VERTIRENT_BARCODE', code: decodedText }, '*');
             }
@@ -47,15 +57,30 @@
         }
 
         function startWithCamera(cameraIdOrConfig) {
+            const config = {
+                fps: 20,
+                qrbox: function(viewfinderWidth, viewfinderHeight) {
+                    return {
+                        width: Math.floor(viewfinderWidth * 0.85),
+                        height: Math.floor(viewfinderHeight * 0.45)
+                    };
+                },
+                videoConstraints: {
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                    focusMode: "continuous"
+                }
+            };
+
             html5QrCode.start(
                 cameraIdOrConfig,
-                { fps: 15, qrbox: { width: 260, height: 150 } },
+                config,
                 onScanSuccess,
                 () => {}
             ).then(() => {
-                statusText.textContent = "Richt de camera op een barcode of QR-code...";
+                statusText.textContent = "Houd de streepjescode horizontaal in het kader (15-25 cm afstand)...";
             }).catch(err => {
-                statusText.textContent = "Geef de browser toestemming voor de camera: " + err;
+                statusText.textContent = "Camera fout: " + err;
             });
         }
 
